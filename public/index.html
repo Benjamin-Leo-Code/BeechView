@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BeechView">
+  <meta name="theme-color" content="#0d0f12">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <title>BeechView</title>
+</head>
+<body>
+  <main id="app" aria-live="polite"></main>
+
+  <section id="player" class="player" hidden>
+    <video id="video" playsinline webkit-playsinline preload="metadata" controls></video>
+    <div class="player-bar" id="playerBar">
+      <button class="icon-btn" id="playerBack" aria-label="Back">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="player-title">
+        <div class="player-show" id="playerShow"></div>
+        <div class="player-ep" id="playerEp"></div>
+      </div>
+    </div>
+    <div class="up-next" id="upNext" hidden>
+      <div class="up-next-label">Up next in <span id="upNextCount">8</span></div>
+      <div class="up-next-title" id="upNextTitle"></div>
+      <div class="up-next-actions">
+        <button class="pill" id="upNextPlay">Play now</button>
+        <button class="pill ghost" id="upNextCancel">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
