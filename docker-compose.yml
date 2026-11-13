@@ -1,0 +1,23 @@
+services:
+  beechview:
+    build: .
+    container_name: beechview
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - MEDIA_ROOT=/media
+    volumes:
+      # Change the left-hand side to where "shows (watch)" lives on the host
+      # running this container (e.g. on Unraid: /mnt/user/files/pinchflat/shows (watch)).
+      - "/mnt/user/files/pinchflat/shows (watch):/media:ro"
+
+# --- Alternative: mount the folder straight from an SMB share -------------
+# Remove the bind mount above, uncomment below, and use `- shows:/media:ro`.
+# volumes:
+#   shows:
+#     driver: local
+#     driver_opts:
+#       type: cifs
+#       device: "//192.168.10.80/files/pinchflat/shows (watch)"
+#       o: "username=YOUR_USER,password=YOUR_PASSWORD,ro,vers=3.0"
