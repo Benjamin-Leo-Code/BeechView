@@ -22,7 +22,35 @@ out for Apple HomeView's square 7" screen (1088 × 1088) in Safari.
 The server must run on your home network with the shows folder mounted, e.g.
 on the machine at `192.168.10.80`.
 
-### Docker (recommended)
+### Unraid (recommended)
+
+This uses Unraid's standard `node:22-alpine` image, so nothing needs building.
+
+1. **Copy BeechView to Unraid.** Download this repo as a ZIP (on GitHub:
+   **Code → Download ZIP**) and unzip it. Then copy the files into a folder
+   called `beechview` in the `appdata` share (`\\192.168.10.80\appdata`, or
+   `smb://192.168.10.80/appdata` on a Mac). You should end up with
+   `appdata/beechview/server.js` and `appdata/beechview/public/`.
+   If `appdata` isn't visible, set **Shares → appdata → SMB Export** to *Yes*.
+2. **Install the template.** Copy `unraid/my-beechview.xml` into the flash
+   drive's `config/plugins/dockerMan/templates-user/` folder
+   (`\\192.168.10.80\flash\config\plugins\dockerMan\templates-user\`).
+   If the `flash` share isn't visible, go to **Main → Flash** (click the
+   flash device) and set **SMB Security Settings → Export** to *Yes*.
+3. **Create the container.** Go to **Docker → Add Container**, choose
+   **beechview** from the **Template** drop-down, and check the two folders:
+   - *App folder*: `/mnt/user/appdata/beechview`
+   - *Shows folder*: where `shows (watch)` lives, e.g.
+     `/mnt/user/files/pinchflat/shows (watch)`
+
+   If something else already uses port 8080, change *Web UI port*. Click **Apply**.
+4. On the HomeView, open **http://192.168.10.80:8080** in Safari.
+
+To update BeechView later, copy the new files over the old ones in
+`appdata/beechview` and restart the container. If it says "No shows yet",
+check the container's **Logs**: they show which folder it is reading.
+
+### Docker Compose (other machines)
 
 Edit the volume in `docker-compose.yml` so the left-hand side is the real path
 to `shows (watch)` on that machine, then:
