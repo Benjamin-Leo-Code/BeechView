@@ -1,7 +1,7 @@
 {
   "name": "BeechView",
   "short_name": "BeechView",
-  "start_url": "/",
+  "start_url": "./",
   "display": "fullscreen",
   "background_color": "#0d0f12",
   "theme_color": "#0d0f12",

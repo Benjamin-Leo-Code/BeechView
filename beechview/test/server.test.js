@@ -9,6 +9,7 @@ const path = require('path');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-'));
 process.env.MEDIA_ROOT = root;
 process.env.SCAN_TTL_SECONDS = '0';
+process.env.HA_OPTIONS = '/nonexistent';
 const { createServer, cleanTitle } = require('../server');
 
 function write(rel, data = 'x') {
@@ -59,7 +60,7 @@ test('episodes are newest first with titles, dates and thumbnails', async () => 
 
 test('video supports byte ranges (needed by Safari)', async () => {
   const show = await (await fetch(base + '/api/shows/Channel%20A')).json();
-  const r = await fetch(base + show.episodes[0].src, { headers: { Range: 'bytes=0-1' } });
+  const r = await fetch(base + '/' + show.episodes[0].src, { headers: { Range: 'bytes=0-1' } });
   assert.strictEqual(r.status, 206);
   assert.strictEqual(r.headers.get('content-range'), 'bytes 0-1/1000');
   assert.strictEqual((await r.arrayBuffer()).byteLength, 2);

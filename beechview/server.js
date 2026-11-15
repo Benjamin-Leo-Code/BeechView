@@ -10,10 +10,20 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
-const MEDIA_ROOT = path.resolve(process.env.MEDIA_ROOT || '/media');
+// When run as a Home Assistant app, settings come from /data/options.json.
+function haOptions() {
+  try {
+    return JSON.parse(fs.readFileSync(process.env.HA_OPTIONS || '/data/options.json', 'utf8'));
+  } catch {
+    return {};
+  }
+}
+const OPTIONS = haOptions();
+
+const MEDIA_ROOT = path.resolve(process.env.MEDIA_ROOT || OPTIONS.media_path || '/media');
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const HOST = process.env.HOST || '0.0.0.0';
-const SCAN_TTL_MS = parseInt(process.env.SCAN_TTL_SECONDS || '15', 10) * 1000;
+const SCAN_TTL_MS = parseInt(process.env.SCAN_TTL_SECONDS || OPTIONS.rescan_seconds || '15', 10) * 1000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv']);
@@ -49,7 +59,8 @@ const SHOW_ART = ['poster', 'folder', 'cover', 'show', 'fanart', 'banner'];
 const hidden = (name) => name.startsWith('.') || name.startsWith('@') || name === '#recycle';
 
 const toUrlPath = (rel) => rel.split(path.sep).map(encodeURIComponent).join('/');
-const mediaUrl = (rel) => '/media/' + toUrlPath(rel);
+// Relative URL, so it also works behind Home Assistant's ingress prefix.
+const mediaUrl = (rel) => 'media/' + toUrlPath(rel);
 
 async function walk(dir, depth = 0, out = []) {
   if (depth > 6) return out;
