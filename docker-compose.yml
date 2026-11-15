@@ -1,6 +1,6 @@
 services:
   beechview:
-    build: .
+    build: ./beechview
     container_name: beechview
     restart: unless-stopped
     ports:

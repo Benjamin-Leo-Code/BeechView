@@ -19,16 +19,40 @@ out for Apple HomeView's square 7" screen (1088 × 1088) in Safari.
 
 ## Running it
 
-The server must run on your home network with the shows folder mounted, e.g.
-on the machine at `192.168.10.80`.
+Choose one: Home Assistant, Unraid, Docker Compose or plain Node.js.
 
-### Unraid (recommended)
+### Home Assistant app
+
+BeechView installs as a Home Assistant app. You can watch on HomeView at
+`http://<home-assistant-ip>:8080` without logging in, and it also appears
+in the Home Assistant sidebar.
+
+**Install it.** Pick the option that matches the repo's visibility:
+
+- **Private repo: install as a local app.**
+  1. In Home Assistant, install the **Samba share** app from the app store and start it.
+  2. Download this repo as a ZIP (**Code → Download ZIP**) and unzip it.
+  3. Copy the whole `beechview` folder into the `addons` share, i.e.
+     `\\<home-assistant-ip>\addons\beechview`.
+  4. Go to **Settings → Apps → App store**, open the **⋮** menu, choose
+     **Check for updates** and refresh the page. **BeechView** appears
+     under **Local apps**.
+- **Public repo: add it as a repository.** In **Settings → Apps → App store**,
+  open the **⋮** menu, choose **Repositories** and add
+  `https://github.com/Benjamin-Leo-Code/BeechView`.
+
+Click **BeechView**, then **Install**. Building the app takes a minute or two.
+Before you start it, follow the app's **Documentation** tab
+([beechview/DOCS.md](beechview/DOCS.md)). It shows how to add your Unraid
+share under **Settings → System → Storage** so BeechView can see the shows.
+
+### Unraid
 
 This uses Unraid's standard `node:22-alpine` image, so nothing needs building.
 
 1. **Copy BeechView to Unraid.** Download this repo as a ZIP (on GitHub:
-   **Code → Download ZIP**) and unzip it. Then copy the files into a folder
-   called `beechview` in the `appdata` share (`\\192.168.10.80\appdata`, or
+   **Code → Download ZIP**) and unzip it. Then copy the whole `beechview`
+   folder from the ZIP into the `appdata` share (`\\192.168.10.80\appdata`, or
    `smb://192.168.10.80/appdata` on a Mac). You should end up with
    `appdata/beechview/server.js` and `appdata/beechview/public/`.
    If `appdata` isn't visible, set **Shares → appdata → SMB Export** to *Yes*.
@@ -62,6 +86,7 @@ docker compose up -d --build
 ### Plain Node.js (18 or newer)
 
 ```sh
+cd beechview
 MEDIA_ROOT="/path/to/files/pinchflat/shows (watch)" npm start
 ```
 
@@ -84,5 +109,6 @@ profile's preferred container to **MP4** so everything plays on HomeView.
 ## Development
 
 ```sh
+cd beechview
 npm test   # spins up the server against a fake Pinchflat library
 ```

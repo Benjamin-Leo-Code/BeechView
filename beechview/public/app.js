@@ -415,7 +415,7 @@
   }
 
   function findShow(id) {
-    return api('/api/shows/' + id).then(function (show) {
+    return api('api/shows/' + id).then(function (show) {
       state.show = show;
       return show;
     });
@@ -451,7 +451,7 @@
 
   // Re-scan the library. New folders become new shows without a reload.
   function refresh(force) {
-    return api('/api/shows' + (force ? '?refresh=1' : '')).then(function (data) {
+    return api('api/shows' + (force ? '?refresh=1' : '')).then(function (data) {
       state.shows = data.shows;
       if (state.playing) return;
       state.keepScroll = true;
