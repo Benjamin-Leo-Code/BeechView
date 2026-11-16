@@ -80,6 +80,11 @@ test('refuses path traversal and hidden files', async () => {
   }
 });
 
+test('accepts log notes from the page', async () => {
+  const r = await fetch(base + '/api/log', { method: 'POST', body: JSON.stringify({ event: 'test', detail: 'hello' }) });
+  assert.strictEqual(r.status, 204);
+});
+
 test('cleanTitle strips ids, series/episode numbers and dates', () => {
   assert.strictEqual(cleanTitle('s2024e1105 - My Video [dQw4w9WgXcQ]'), 'My Video');
   assert.strictEqual(cleanTitle('2024-11-05 Another one'), 'Another one');

@@ -81,8 +81,7 @@
     for (var i = 0; i < name.length; i++) x = (x * 31 + name.charCodeAt(i)) >>> 0;
     return x % 360;
   }
-  function artStyle(name, img) {
-    if (img) return 'background-image:url("' + img.replace(/"/g, '%22') + '")';
+  function artStyle(name) {
     var hh = hue(name);
     return 'background-image:linear-gradient(135deg,hsl(' + hh + ',45%,32%),hsl(' + ((hh + 40) % 360) + ',55%,18%))';
   }
@@ -110,9 +109,20 @@
     });
   }
 
+  // Images are <img loading="lazy">, so Safari only downloads and decodes the
+  // ones near the screen. (CSS backgrounds were all loaded at once, which
+  // can use enough memory on HomeView for Safari to reload the page.)
+  function lazyImg(src) {
+    return h('img', { src: src, loading: 'lazy', decoding: 'async', alt: '' });
+  }
+  function artEl(name, img) {
+    return h('div', { class: 'art', style: artStyle(name) }, [img ? lazyImg(img) : initials(name)]);
+  }
+
   function thumbEl(ep) {
     var f = fraction(ep.id);
-    return h('div', { class: 'thumb', style: ep.thumb ? 'background-image:url("' + ep.thumb + '")' : '' }, [
+    return h('div', { class: 'thumb' }, [
+      ep.thumb ? lazyImg(ep.thumb) : null,
       isWatched(ep.id) ? h('div', { class: 'tick', html: ICON.tick }) : null,
       f > 0.01 && !isWatched(ep.id)
         ? h('div', { class: 'progress' }, [h('i', { style: 'width:' + (f * 100).toFixed(1) + '%' })])
@@ -186,7 +196,7 @@
     nodes.push(h('div', { class: 'grid' }, shows.map(function (s) {
       var fresh = s.latest && Date.now() - s.latest < NEW_MS;
       return h('button', { class: 'card', onclick: function () { go('#/show/' + s.id); } }, [
-        h('div', { class: 'art', style: artStyle(s.name, s.poster) }, [s.poster ? null : initials(s.name)]),
+        artEl(s.name, s.poster),
         fresh ? h('span', { class: 'badge' }, ['NEW']) : null,
         h('div', { class: 'meta' }, [
           h('div', { class: 'name' }, [s.name]),
@@ -210,7 +220,7 @@
     var nodes = [
       bar(show.name, { back: function () { go('#/'); } }),
       h('div', { class: 'show-head' }, [
-        h('div', { class: 'art', style: artStyle(show.name, show.poster) }, [show.poster ? null : initials(show.name)]),
+        artEl(show.name, show.poster),
         h('div', { class: 'info' }, [
           h('h2', { class: 'show-name' }, [show.name]),
           h('div', { class: 'count' }, [
@@ -471,14 +481,62 @@
     refresh();
   }
 
-  // On launch (and when Safari restores the page), start from the home
-  // screen with a fresh look at the library rather than an old page.
-  function launch() {
+  // ---------------------------------------------------------------- diagnostics
+  // Short notes sent to the server log (Home Assistant: the app's Log tab),
+  // so problems on HomeView can be seen without a developer console.
+  function report(event, detail) {
+    try {
+      fetch('api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: event, detail: String(detail || '').slice(0, 300) }),
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) { /* ignore */ }
+  }
+  window.addEventListener('error', function (e) {
+    report('error', (e.message || 'unknown') + ' @ ' + (e.filename || '').split('/').pop() + ':' + (e.lineno || 0));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    report('error', 'unhandled: ' + (e.reason && e.reason.message || e.reason));
+  });
+  function navigationType() {
+    try {
+      var n = performance.getEntriesByType('navigation')[0];
+      if (n && n.type) return n.type;
+    } catch (e) { /* ignore */ }
+    return 'navigate';
+  }
+  // Remember the current screen for this tab, so a reload can return to it.
+  function rememberRoute() {
+    try { sessionStorage.setItem('bv:route', rawHash()); } catch (e) { /* ignore */ }
+  }
+  function rememberedRoute() {
+    try { return sessionStorage.getItem('bv:route') || ''; } catch (e) { return ''; }
+  }
+  window.addEventListener('hashchange', function () {
+    rememberRoute();
+    var r = currentRoute();
+    if (r.name !== 'home') report('screen', r.name + ' ' + safeDecode(r.show));
+  });
+
+  // On launch, start from the home screen with a fresh look at the library.
+  // But if Safari *reloaded* the page (the reload button, or Safari restarting
+  // the page by itself, e.g. when short of memory), go back to the channel
+  // you were on instead of dumping you on the home screen.
+  function launch(restored) {
+    var how = restored ? 'restored' : navigationType();
+    var last = rememberedRoute();
+    var lastRoute = /^\/?(show|play)\/([^/]+)/.exec(last);
+    report('page opened', how + (last ? ' (was on ' + safeDecode(last) + ')' : ''));
     state.loaded = false;
     state.failures = 0;
     state.show = null;
     closePlayer();
-    if (rawHash() && rawHash() !== '/') history.replaceState(null, '', location.pathname + location.search + '#/');
+    var target = '/';
+    if (how === 'reload' && lastRoute) target = '/show/' + lastRoute[2];
+    if (rawHash() !== target) history.replaceState(null, '', location.pathname + location.search + '#' + target);
+    rememberRoute();
     route();       // shows "Loading…" and fetches the server's latest scan
     refresh(true); // then asks the server to rescan the folders now
   }
@@ -526,7 +584,7 @@
     else if (!state.playing) refresh();
   });
   window.addEventListener('pagehide', function () { persist(); });
-  window.addEventListener('pageshow', function (e) { if (e.persisted) launch(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) launch(true); });
   window.addEventListener('hashchange', route);
   launch();
 })();

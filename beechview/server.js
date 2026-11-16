@@ -339,10 +339,34 @@ async function sendFile(req, res, file, { cache: cacheControl = 'no-cache', allo
 
 const MEDIA_ALLOWED = new Set([...VIDEO_EXT, ...IMAGE_EXT, '.vtt']);
 
+// Notes from the page (reloads, errors, screens), written to the log so they
+// show up in Home Assistant's Log tab. Small and plain text only.
+function logFromClient(req, res) {
+  let body = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    body += chunk;
+    if (body.length > 2048) req.destroy();
+  });
+  req.on('end', () => {
+    try {
+      const { event, detail } = JSON.parse(body);
+      const clean = (v) => String(v || '').replace(/[^\x20-\x7e\u00a0-\uffff]/g, ' ').slice(0, 300);
+      const who = (req.headers['user-agent'] || '').match(/\(([^;)]+)/);
+      console.log(`[page${who ? ' ' + who[1] : ''}] ${clean(event)}${detail ? ': ' + clean(detail) : ''}`);
+    } catch {
+      /* ignore malformed notes */
+    }
+    res.writeHead(204);
+    res.end();
+  });
+}
+
 async function handle(req, res) {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return sendError(res, 405, 'Method not allowed');
   const url = new URL(req.url, 'http://local');
   const p = url.pathname;
+  if (req.method === 'POST' && p === '/api/log') return logFromClient(req, res);
+  if (req.method !== 'GET' && req.method !== 'HEAD') return sendError(res, 405, 'Method not allowed');
 
   if (p === '/api/health') return sendJson(res, 200, { ok: true, mediaRoot: MEDIA_ROOT });
 
