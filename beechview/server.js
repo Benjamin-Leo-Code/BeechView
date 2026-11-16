@@ -79,19 +79,32 @@ async function walk(dir, depth = 0, out = []) {
   return out;
 }
 
-// Turn "s2024e1105 - My Video [dQw4w9WgXcQ]" into "My Video".
+// Turn "s2024e1105 - My Video [dQw4w9WgXcQ]" into "My Video": drop the video
+// id, any series/episode numbering (s2024e1105, S01E05, S1 E5, Season 1
+// Episode 5, 1x05) and leading dates, then tidy up leftover separators.
+const SEP = '[\\s._|:\\-–—]';
 function cleanTitle(base) {
-  return base
+  const t = base
     .replace(/\s*\[[A-Za-z0-9_-]{6,}\]\s*$/, '')
-    .replace(/^s\d+e\d+\s*[-–—]\s*/i, '')
-    .replace(/^\d{4}-\d{2}-\d{2}\s+/, '')
-    .replace(/^\d{8}\s*[-–—_]?\s*/, '')
-    .replace(/[_]+/g, ' ')
-    .trim() || base;
+    .replace(/\s*\([A-Za-z0-9_-]{11}\)\s*$/, '')
+    .replace(/\bS(?:eason)?[\s._-]*\d{1,4}[\s._-]*E(?:p(?:isode)?)?[\s._-]*\d{1,6}\b/gi, ' - ')
+    .replace(/\b\d{1,2}x\d{2,3}\b/g, ' - ')
+    .replace(/^\s*\d{4}-\d{2}-\d{2}\b/, ' - ')
+    .replace(/^\s*\d{8}\b/, ' - ')
+    .replace(/_+/g, ' ')
+    .replace(new RegExp(`^${SEP}+`), '')
+    .replace(/[\s|:\-–—]+$/, '')
+    .replace(/\s+[-–—|]\s+(?:[-–—|]\s+)+/g, ' - ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return t || base;
 }
 
 function findDate(text) {
-  let m = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  // Pinchflat's "season from date" numbering: s2024e1105 = 5 Nov 2024.
+  let m = text.match(/\bs(20\d{2})e(\d{2})(\d{2})/i);
+  if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = text.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = text.match(/(?:^|[^\d])(20\d{2})(\d{2})(\d{2})(?:[^\d]|$)/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
@@ -199,7 +212,9 @@ function runScan() {
         while (next < dirs.length) shows.push(await scanShow(dirs[next++]));
       };
       await Promise.all([worker(), worker(), worker()]);
-      shows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+      // Most recently updated show (newest video) first.
+      shows.sort((a, b) => b.latest - a.latest ||
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
       const firstScan = !cache.data;
       cache.at = Date.now();
       cache.data = shows;

@@ -61,30 +61,36 @@ svg { display: block; }
 }
 #app {
   /* bottom padding keeps the last row clear of the fixed bar */
-  padding: 0.5rem 1.25rem calc(6.5rem + env(safe-area-inset-bottom));
+  padding: 1.25rem 1.25rem calc(8rem + env(safe-area-inset-bottom));
 }
 
 /* ---------- Bottom bar ---------- */
+/* A floating pill, inset from the edges so HomeView's rounded screen
+   corners don't clip the title or the refresh button. */
 .bar {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 2.5rem;
+  right: 2.5rem;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom));
   z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-height: 4.5rem;
-  padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom));
-  background: rgba(13, 15, 18, 0.88);
+  min-height: 4.2rem;
+  padding: 0.6rem 0.6rem 0.6rem 1.5rem;
+  border-radius: 2.1rem;
+  background: rgba(32, 36, 44, 0.86);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.45);
 }
+.bar .icon-btn { background: rgba(255, 255, 255, 0.1); }
+.bar .icon-btn:first-child { margin-left: -0.9rem; }
 .bar h1 {
   flex: 1;
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -219,7 +225,20 @@ svg { display: block; }
   font-weight: 800;
 }
 .show-head .info { min-width: 0; flex: 1; }
-.show-head .count { color: var(--muted); font-size: 0.95rem; margin-bottom: 0.6rem; }
+.show-name {
+  margin: 0 0 0.3rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.show-head .count { color: var(--muted); font-size: 0.95rem; }
+.show-head .sort { flex: none; align-self: center; }
+.rail + .grid { margin-top: 1.25rem; }
 .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 
 .pill {

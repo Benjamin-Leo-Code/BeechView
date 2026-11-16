@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+
+- The bottom bar floats slightly in from the edges so HomeView's rounded
+  corners no longer clip the title or refresh button.
+- Shows are ordered by their most recently downloaded video, newest first.
+- Series and episode numbers (e.g. s2026e1105, S01E05, Season 1 Episode 5,
+  1x05) are removed from video titles. Pinchflat's date-based numbering is
+  shown as the episode date instead.
+- Removed the "Shows" heading from the home screen.
+- Channel page: removed the Play button, moved the sort button to the right
+  and added the channel name above the episode count.
+
 ## 1.1.1
 
 - Fixed: the bottom bar now stays on screen while you scroll (also inside the
