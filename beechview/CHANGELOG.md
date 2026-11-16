@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.2
+
+- Fixed (likely cause): opening a channel could jump back to the home
+  screen. Safari on HomeView reloads a page that uses too much memory, and
+  every thumbnail was being loaded at once. Images now load lazily as they
+  scroll into view.
+- If Safari reloads the page while you are in a channel, it now reopens that
+  channel instead of going to the home screen.
+- The page now writes short notes to the app's Log (page opened/reloaded,
+  channel opened, errors) to help diagnose problems on HomeView.
+
 ## 1.2.1
 
 - Fixed: Pinchflat numbering such as s2026e092799 is now removed even when it
