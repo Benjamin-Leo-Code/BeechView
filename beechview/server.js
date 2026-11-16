@@ -87,8 +87,10 @@ function cleanTitle(base) {
   const t = base
     .replace(/\s*\[[A-Za-z0-9_-]{6,}\]\s*$/, '')
     .replace(/\s*\([A-Za-z0-9_-]{11}\)\s*$/, '')
-    .replace(/\bS(?:eason)?[\s._-]*\d{1,4}[\s._-]*E(?:p(?:isode)?)?[\s._-]*\d{1,6}\b/gi, ' - ')
-    .replace(/\b\d{1,2}x\d{2,3}\b/g, ' - ')
+    // Not "\b": an underscore counts as part of a word, so s2026e092799_Title
+    // would be missed. Only refuse letters/digits directly around the number.
+    .replace(/(?<![a-z0-9])S(?:eason)?[\s._-]*\d{1,4}[\s._-]*E(?:p(?:isode)?)?[\s._-]*\d{1,6}(?![a-z0-9])/gi, ' - ')
+    .replace(/(?<![a-z0-9])\d{1,2}x\d{2,3}(?![a-z0-9])/gi, ' - ')
     .replace(/^\s*\d{4}-\d{2}-\d{2}\b/, ' - ')
     .replace(/^\s*\d{8}\b/, ' - ')
     .replace(/_+/g, ' ')
@@ -102,7 +104,7 @@ function cleanTitle(base) {
 
 function findDate(text) {
   // Pinchflat's "season from date" numbering: s2024e1105 = 5 Nov 2024.
-  let m = text.match(/\bs(20\d{2})e(\d{2})(\d{2})/i);
+  let m = text.match(/(?<![a-z0-9])s(20\d{2})e(\d{2})(\d{2})\d{0,2}(?!\d)/i);
   if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) return `${m[1]}-${m[2]}-${m[3]}`;
   m = text.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;

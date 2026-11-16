@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Fixed: Pinchflat numbering such as s2026e092799 is now removed even when it
+  is joined to the title with an underscore, and is shown as the episode date.
+
 ## 1.2.0
 
 - The bottom bar floats slightly in from the edges so HomeView's rounded

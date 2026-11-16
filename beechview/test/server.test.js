@@ -85,6 +85,9 @@ test('cleanTitle strips ids, series/episode numbers and dates', () => {
   assert.strictEqual(cleanTitle('2024-11-05 Another one'), 'Another one');
   assert.strictEqual(cleanTitle('S2026E110501 - Upper case [abcdefghijk]'), 'Upper case');
   assert.strictEqual(cleanTitle('s2026e1105 No dash'), 'No dash');
+  assert.strictEqual(cleanTitle('s2026e092799 - Some video [dQw4w9WgXcQ]'), 'Some video');
+  assert.strictEqual(cleanTitle('s2026e092799_Some video'), 'Some video');
+  assert.strictEqual(cleanTitle('Some_video_s2026e092799'), 'Some video');
   assert.strictEqual(cleanTitle('Show - S01E05 - The Thing'), 'Show - The Thing');
   assert.strictEqual(cleanTitle('Season 2 Episode 3 - Ending'), 'Ending');
   assert.strictEqual(cleanTitle('Top 10 cars of 2024 (part 2)'), 'Top 10 cars of 2024 (part 2)');
