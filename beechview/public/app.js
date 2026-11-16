@@ -3,6 +3,8 @@
   'use strict';
 
   var app = document.getElementById('app');
+  var scroller = document.getElementById('scroller');
+  var barHost = document.getElementById('barHost');
   var player = document.getElementById('player');
   var video = document.getElementById('video');
   var playerBar = document.getElementById('playerBar');
@@ -281,10 +283,13 @@
   }
 
   function mount(nodes) {
-    var y = state.keepScroll ? window.scrollY : 0;
+    var y = state.keepScroll ? scroller.scrollTop : 0;
     app.innerHTML = '';
-    nodes.forEach(function (n) { app.appendChild(n); });
-    window.scrollTo(0, y);
+    barHost.innerHTML = '';
+    nodes.forEach(function (n) {
+      (n.classList && n.classList.contains('bar') ? barHost : app).appendChild(n);
+    });
+    scroller.scrollTop = y;
     state.keepScroll = false;
   }
 
@@ -318,7 +323,6 @@
     });
 
     player.hidden = false;
-    document.body.style.overflow = 'hidden';
     var attempt = video.play();
     if (attempt && attempt.catch) attempt.catch(function () { /* autoplay blocked: user taps play */ });
     showBar();
@@ -331,7 +335,6 @@
     video.removeAttribute('src');
     video.load();
     player.hidden = true;
-    document.body.style.overflow = '';
     state.playing = null;
     cancelUpNext();
   }
@@ -409,39 +412,81 @@
   document.getElementById('playerBack').addEventListener('click', function () { history.back(); });
 
   // ---------------------------------------------------------------- routing
+  // Read the hash from the raw URL: some Safari versions decode location.hash,
+  // which would mangle show and episode ids that contain encoded characters.
+  function rawHash() {
+    var i = location.href.indexOf('#');
+    return i < 0 ? '' : location.href.slice(i + 1);
+  }
+  function currentRoute() {
+    var parts = rawHash().replace(/^\/?/, '').split('/');
+    if (parts[0] === 'play' && parts[1] && parts[2]) {
+      return { name: 'play', show: parts[1], ep: safeDecode(parts.slice(2).join('/')) };
+    }
+    if (parts[0] === 'show' && parts[1]) return { name: 'show', show: parts[1] };
+    return { name: 'home' };
+  }
+  function safeDecode(x) {
+    try { return decodeURIComponent(x); } catch (e) { return x; }
+  }
+  // Is the screen still showing this show? (Answers can arrive after the
+  // viewer has moved on; they must not redraw a different screen.)
+  function stillOn(showId) {
+    var r = currentRoute();
+    return r.name !== 'home' && r.show === showId;
+  }
+
   function go(hash) {
-    if (location.hash === hash) route();
+    if (rawHash() === hash.slice(1)) route();
     else location.hash = hash;
   }
 
-  function findShow(id) {
+  // Fetch a show, retrying a couple of times if the server is slow to answer.
+  function findShow(id, attempt) {
+    attempt = attempt || 0;
     return api('api/shows/' + id).then(function (show) {
-      state.show = show;
+      if (stillOn(id)) state.show = show;
       return show;
+    }, function (err) {
+      if (attempt >= 2 || !stillOn(id)) throw err;
+      return new Promise(function (r) { setTimeout(r, 1500); }).then(function () {
+        return findShow(id, attempt + 1);
+      });
     });
   }
 
+  function showError(id) {
+    if (!stillOn(id)) return;
+    mount([bar('BeechView', { back: function () { go('#/'); } }), h('div', { class: 'empty' }, [
+      h('strong', null, ['Couldn’t open this show']),
+      'Tap refresh to try again.'
+    ])]);
+  }
+
   function route() {
-    var parts = (location.hash.replace(/^#\/?/, '') || '').split('/');
-    if (parts[0] === 'play' && parts[1] && parts[2]) {
-      var epId = decodeURIComponent(parts.slice(2).join('/'));
-      var ready = state.show && state.show.id === parts[1] ? Promise.resolve(state.show) : findShow(parts[1]);
+    var r = currentRoute();
+    if (r.name === 'play') {
+      var ready = state.show && state.show.id === r.show ? Promise.resolve(state.show) : findShow(r.show);
       ready.then(function (show) {
-        var ep = show.episodes.find(function (e) { return e.id === epId; });
+        if (!stillOn(r.show)) return;
+        var ep = show.episodes.find(function (e) { return e.id === r.ep; });
         if (!ep) { location.replace('#/show/' + show.id); return; }
-        if (!app.firstChild) renderShow(); // deep link: draw the show underneath
+        if (!app.firstChild || !state.show) { state.show = show; renderShow(); } // draw the show underneath
         openPlayer(show, ep);
-      }).catch(function () { location.replace('#/'); });
+      }).catch(function () { showError(r.show); });
       return;
     }
 
     closePlayer();
-    if (parts[0] === 'show' && parts[1]) {
-      var cached = state.show && state.show.id === parts[1];
+    if (r.name === 'show') {
+      var cached = state.show && state.show.id === r.show;
       if (cached) { state.keepScroll = true; renderShow(); }
-      else loadingView('BeechView', { back: function () { go('#/'); } });
-      findShow(parts[1]).then(function () { state.keepScroll = cached; renderShow(); })
-        .catch(function () { location.replace('#/'); });
+      else { state.show = null; loadingView('BeechView', { back: function () { go('#/'); } }); }
+      findShow(r.show).then(function () {
+        if (!stillOn(r.show) || state.playing) return;
+        state.keepScroll = cached;
+        renderShow();
+      }).catch(function () { if (!cached) showError(r.show); });
       return;
     }
 
@@ -457,12 +502,13 @@
     state.failures = 0;
     state.show = null;
     closePlayer();
-    if (location.hash && location.hash !== '#/') history.replaceState(null, '', location.pathname + location.search + '#/');
-    route();     // shows "Loading…" and fetches the server's latest scan
+    if (rawHash() && rawHash() !== '/') history.replaceState(null, '', location.pathname + location.search + '#/');
+    route();       // shows "Loading…" and fetches the server's latest scan
     refresh(true); // then asks the server to rescan the folders now
   }
 
   // Re-scan the library. New folders become new shows without a reload.
+  // Only the screen currently showing is redrawn.
   var retryTimer = null;
   function refresh(force) {
     return api('api/shows' + (force ? '?refresh=1' : '')).then(function (data) {
@@ -470,20 +516,27 @@
       state.loaded = true;
       state.failures = 0;
       if (state.playing) return;
-      state.keepScroll = true;
-      if (state.show) {
-        return findShow(state.show.id).then(function () { state.keepScroll = true; renderShow(); });
+      var r = currentRoute();
+      if (r.name === 'show') {
+        return findShow(r.show).then(function () {
+          if (!stillOn(r.show) || state.playing || !state.show) return;
+          state.keepScroll = true;
+          renderShow();
+        }).catch(function () { /* keep what is on screen */ });
       }
-      renderHome();
+      if (r.name === 'home') {
+        state.keepScroll = true;
+        renderHome();
+      }
     }).catch(function () {
       if (state.loaded) return;
       // Not loaded yet: keep showing "Loading…" and try again shortly. After a
       // few failures, explain what's wrong (but keep retrying).
       state.failures += 1;
-      if (state.failures >= 5 && !state.show && !state.playing) {
+      if (state.failures >= 5 && currentRoute().name === 'home') {
         mount([bar('BeechView'), h('div', { class: 'empty' }, [
-          h('strong', null, ['Can\u2019t reach the library']),
-          'Still trying\u2026 Check that the BeechView server is running.'
+          h('strong', null, ['Can’t reach the library']),
+          'Still trying… Check that the BeechView server is running.'
         ])]);
       }
       clearTimeout(retryTimer);

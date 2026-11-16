@@ -191,7 +191,14 @@ function runScan() {
         console.error(`Cannot read MEDIA_ROOT ${MEDIA_ROOT}: ${err.message}`);
       }
       const dirs = entries.filter((e) => e.isDirectory() && !hidden(e.name)).map((e) => e.name);
-      const shows = await Promise.all(dirs.map(scanShow));
+      // A few shows at a time, so a rescan of a network share doesn't hog the
+      // disk/network and slow down thumbnails and video for whoever is watching.
+      const shows = [];
+      let next = 0;
+      const worker = async () => {
+        while (next < dirs.length) shows.push(await scanShow(dirs[next++]));
+      };
+      await Promise.all([worker(), worker(), worker()]);
       shows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
       const firstScan = !cache.data;
       cache.at = Date.now();

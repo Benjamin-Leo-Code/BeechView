@@ -15,7 +15,10 @@
   <title>BeechView</title>
 </head>
 <body>
-  <main id="app" aria-live="polite"></main>
+  <!-- The list scrolls inside #scroller; the bar sits on top of it at the
+       bottom of the screen, so it stays put even inside an iframe. -->
+  <div id="scroller"><main id="app" aria-live="polite"></main></div>
+  <div id="barHost"></div>
 
   <section id="player" class="player" hidden>
     <video id="video" playsinline webkit-playsinline preload="metadata" controls></video>
