@@ -12,7 +12,7 @@
   var NEW_MS = 3 * 24 * 3600 * 1000; // "NEW" badge for shows updated in the last 3 days
   var WATCHED = 0.92;                // fraction played that counts as watched
 
-  var state = { shows: [], show: null, playing: null, sortOldest: false };
+  var state = { shows: [], show: null, playing: null, sortOldest: false, loaded: false, failures: 0 };
 
   // ---------------------------------------------------------------- storage
   // Progress lives in this device's localStorage. Wrapped in try/catch so the
@@ -119,12 +119,12 @@
     ]);
   }
 
-  function topbar(title, opts) {
+  // Title bar, fixed to the bottom of the screen.
+  function bar(title, opts) {
     opts = opts || {};
-    return h('header', { class: 'topbar' }, [
+    return h('nav', { class: 'bar' }, [
       opts.back ? h('button', { class: 'icon-btn', 'aria-label': 'Back', html: ICON.back, onclick: opts.back }) : null,
       h('h1', null, [title]),
-      opts.clock ? h('div', { class: 'clock', id: 'clock' }, [clockText()]) : null,
       h('button', {
         class: 'icon-btn', 'aria-label': 'Refresh', html: ICON.refresh,
         onclick: function (e) {
@@ -135,19 +135,19 @@
       })
     ]);
   }
-  function clockText() {
-    return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  function loadingView(title, opts) {
+    mount([bar(title || 'BeechView', opts), h('div', { class: 'empty loading' }, [
+      h('div', { class: 'spinner' }), 'Loading\u2026'
+    ])]);
   }
-  setInterval(function () {
-    var c = document.getElementById('clock');
-    if (c) c.textContent = clockText();
-  }, 15000);
 
   // ---------------------------------------------------------------- views
   function renderHome() {
     document.title = 'BeechView';
+    if (!state.loaded) return loadingView();
     var shows = state.shows;
-    var nodes = [topbar('BeechView', { clock: true })];
+    var nodes = [bar('BeechView')];
 
     if (!shows.length) {
       nodes.push(h('div', { class: 'empty' }, [
@@ -225,7 +225,7 @@
     document.title = show.name + ' – BeechView';
     var pick = suggested(show);
     var nodes = [
-      topbar(show.name, { back: function () { go('#/'); } }),
+      bar(show.name, { back: function () { go('#/'); } }),
       h('div', { class: 'show-head' }, [
         h('div', { class: 'art', style: artStyle(show.name, show.poster) }, [show.poster ? null : initials(show.name)]),
         h('div', { class: 'info' }, [
@@ -439,6 +439,7 @@
     if (parts[0] === 'show' && parts[1]) {
       var cached = state.show && state.show.id === parts[1];
       if (cached) { state.keepScroll = true; renderShow(); }
+      else loadingView('BeechView', { back: function () { go('#/'); } });
       findShow(parts[1]).then(function () { state.keepScroll = cached; renderShow(); })
         .catch(function () { location.replace('#/'); });
       return;
@@ -449,10 +450,25 @@
     refresh();
   }
 
+  // On launch (and when Safari restores the page), start from the home
+  // screen with a fresh look at the library rather than an old page.
+  function launch() {
+    state.loaded = false;
+    state.failures = 0;
+    state.show = null;
+    closePlayer();
+    if (location.hash && location.hash !== '#/') history.replaceState(null, '', location.pathname + location.search + '#/');
+    route();     // shows "Loading…" and fetches the server's latest scan
+    refresh(true); // then asks the server to rescan the folders now
+  }
+
   // Re-scan the library. New folders become new shows without a reload.
+  var retryTimer = null;
   function refresh(force) {
     return api('api/shows' + (force ? '?refresh=1' : '')).then(function (data) {
       state.shows = data.shows;
+      state.loaded = true;
+      state.failures = 0;
       if (state.playing) return;
       state.keepScroll = true;
       if (state.show) {
@@ -460,12 +476,18 @@
       }
       renderHome();
     }).catch(function () {
-      if (!state.shows.length && !state.show) {
-        mount([topbar('BeechView', { clock: true }), h('div', { class: 'empty' }, [
-          h('strong', null, ['Can’t reach the library']),
-          'Check that the BeechView server is running, then tap refresh.'
+      if (state.loaded) return;
+      // Not loaded yet: keep showing "Loading…" and try again shortly. After a
+      // few failures, explain what's wrong (but keep retrying).
+      state.failures += 1;
+      if (state.failures >= 5 && !state.show && !state.playing) {
+        mount([bar('BeechView'), h('div', { class: 'empty' }, [
+          h('strong', null, ['Can\u2019t reach the library']),
+          'Still trying\u2026 Check that the BeechView server is running.'
         ])]);
       }
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(function () { if (!state.loaded) refresh(); }, 3000);
     });
   }
 
@@ -475,6 +497,7 @@
     else if (!state.playing) refresh();
   });
   window.addEventListener('pagehide', function () { persist(); });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) launch(); });
   window.addEventListener('hashchange', route);
-  route();
+  launch();
 })();

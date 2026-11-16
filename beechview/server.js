@@ -180,27 +180,38 @@ async function scanShow(name) {
 
 let cache = { at: 0, data: null, pending: null };
 
-async function scanLibrary(force = false) {
-  if (!force && cache.data && Date.now() - cache.at < SCAN_TTL_MS) return cache.data;
-  if (cache.pending) return cache.pending;
-  cache.pending = (async () => {
-    let entries = [];
-    try {
-      entries = await fsp.readdir(MEDIA_ROOT, { withFileTypes: true });
-    } catch (err) {
-      console.error(`Cannot read MEDIA_ROOT ${MEDIA_ROOT}: ${err.message}`);
-    }
-    const dirs = entries.filter((e) => e.isDirectory() && !hidden(e.name)).map((e) => e.name);
-    const shows = await Promise.all(dirs.map(scanShow));
-    shows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
-    cache = { at: Date.now(), data: shows, pending: null };
-    return shows;
-  })();
-  try {
-    return await cache.pending;
-  } finally {
-    cache.pending = null;
+function runScan() {
+  if (!cache.pending) {
+    const started = Date.now();
+    cache.pending = (async () => {
+      let entries = [];
+      try {
+        entries = await fsp.readdir(MEDIA_ROOT, { withFileTypes: true });
+      } catch (err) {
+        console.error(`Cannot read MEDIA_ROOT ${MEDIA_ROOT}: ${err.message}`);
+      }
+      const dirs = entries.filter((e) => e.isDirectory() && !hidden(e.name)).map((e) => e.name);
+      const shows = await Promise.all(dirs.map(scanShow));
+      shows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+      const firstScan = !cache.data;
+      cache.at = Date.now();
+      cache.data = shows;
+      if (firstScan) console.log(`Found ${shows.length} shows in ${((cache.at - started) / 1000).toFixed(1)} s`);
+      return shows;
+    })().finally(() => {
+      cache.pending = null;
+    });
   }
+  return cache.pending;
+}
+
+// Scanning a network share can be slow, so once a scan exists, answer from it
+// straight away and refresh it in the background when it is out of date.
+// Only the very first scan, or a forced one (the refresh button), is waited for.
+async function scanLibrary(force = false) {
+  if (force || !cache.data || SCAN_TTL_MS === 0) return runScan();
+  if (Date.now() - cache.at >= SCAN_TTL_MS) runScan().catch((err) => console.error(err));
+  return cache.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +378,8 @@ if (require.main === module) {
   createServer().listen(PORT, HOST, () => {
     console.log(`BeechView listening on http://${HOST}:${PORT}`);
     console.log(`Serving shows from ${MEDIA_ROOT}`);
+    // Scan straight away so the first visit doesn't have to wait for it.
+    scanLibrary(true).catch((err) => console.error(err));
   });
 }
 

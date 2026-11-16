@@ -49,31 +49,36 @@ svg { display: block; }
 
 #app {
   min-height: 100vh;
-  padding: 1.25rem 1.25rem 2rem;
+  /* bottom padding keeps the last row clear of the fixed bar */
+  padding: 0.5rem 1.25rem calc(6.5rem + env(safe-area-inset-bottom));
 }
 
-/* ---------- Top bar ---------- */
-.topbar {
+/* ---------- Bottom bar ---------- */
+.bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-height: 3rem;
-  margin-bottom: 1rem;
+  min-height: 4.5rem;
+  padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom));
+  background: rgba(13, 15, 18, 0.88);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-.topbar h1 {
+.bar h1 {
   flex: 1;
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.topbar .clock {
-  font-size: 1.15rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .icon-btn {
@@ -285,6 +290,21 @@ svg { display: block; }
   font-size: 1.05rem;
   line-height: 1.5;
   padding: 0 1rem;
+}
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 30vh;
+}
+.spinner {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  border: 0.3rem solid var(--surface-2);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
 }
 .empty strong { color: var(--text); display: block; font-size: 1.3rem; margin-bottom: 0.4rem; }
 
