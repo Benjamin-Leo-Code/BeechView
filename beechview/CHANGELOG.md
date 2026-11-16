@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed: the bottom bar now stays on screen while you scroll (also inside the
+  Home Assistant sidebar); the list scrolls underneath it.
+- Fixed: opening a show while the library was refreshing could jump back to the
+  home screen. Background refreshes now only redraw the screen you are on, and
+  a slow show is retried instead of sending you home.
+- Show and episode links work with any characters in folder names.
+- Rescans read a few folders at a time so thumbnails stay quick.
+
 ## 1.1.0
 
 - The title and refresh button now sit in a bar fixed to the bottom of the screen.
