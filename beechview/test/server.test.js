@@ -25,6 +25,13 @@ write('Channel A/Season 2024/s2024e1001 - First [bbbbbbbbbbb]/s2024e1001 - First
 write('Channel A/.hidden.mp4');
 write('Channel B/2024-01-02 Hello.webm');
 write('.stfolder/x.mp4');
+// Channel B has the most recently downloaded video, so it should come first.
+const day = 24 * 3600;
+const now = Date.now() / 1000;
+fs.utimesSync(path.join(root, 'Channel B/2024-01-02 Hello.webm'), now, now);
+for (const f of ['s2024e1105 - Second [abcdefghijk]', 's2024e1001 - First [bbbbbbbbbbb]']) {
+  fs.utimesSync(path.join(root, 'Channel A/Season 2024', f, f + '.mp4'), now - day, now - day);
+}
 
 let base, server;
 test.before(() => new Promise((r) => {
@@ -35,11 +42,11 @@ test.before(() => new Promise((r) => {
 }));
 test.after(() => { server.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
-test('lists each folder as a show', async () => {
+test('lists each folder as a show, most recently updated first', async () => {
   const { shows } = await (await fetch(base + '/api/shows')).json();
-  assert.deepStrictEqual(shows.map((s) => s.name), ['Channel A', 'Channel B']);
-  assert.strictEqual(shows[0].episodeCount, 2);
-  assert.match(shows[0].poster, /poster\.jpg$/);
+  assert.deepStrictEqual(shows.map((s) => s.name), ['Channel B', 'Channel A']);
+  assert.strictEqual(shows[1].episodeCount, 2);
+  assert.match(shows[1].poster, /poster\.jpg$/);
 });
 
 test('new folders appear without a restart', async () => {
@@ -51,6 +58,7 @@ test('new folders appear without a restart', async () => {
 test('episodes are newest first with titles, dates and thumbnails', async () => {
   const show = await (await fetch(base + '/api/shows/' + encodeURIComponent('Channel A'))).json();
   assert.deepStrictEqual(show.episodes.map((e) => e.title), ['Second', 'First']);
+  assert.deepStrictEqual(show.episodes.map((e) => e.date), ['2024-11-05', '2024-10-01']);
   assert.ok(show.episodes[0].thumb.endsWith('-thumb.jpg'));
   assert.strictEqual(show.episodes[0].playable, true);
   const b = await (await fetch(base + '/api/shows/Channel%20B')).json();
@@ -72,7 +80,15 @@ test('refuses path traversal and hidden files', async () => {
   }
 });
 
-test('cleanTitle strips Pinchflat decoration', () => {
+test('cleanTitle strips ids, series/episode numbers and dates', () => {
   assert.strictEqual(cleanTitle('s2024e1105 - My Video [dQw4w9WgXcQ]'), 'My Video');
   assert.strictEqual(cleanTitle('2024-11-05 Another one'), 'Another one');
+  assert.strictEqual(cleanTitle('S2026E110501 - Upper case [abcdefghijk]'), 'Upper case');
+  assert.strictEqual(cleanTitle('s2026e1105 No dash'), 'No dash');
+  assert.strictEqual(cleanTitle('s2026e092799 - Some video [dQw4w9WgXcQ]'), 'Some video');
+  assert.strictEqual(cleanTitle('s2026e092799_Some video'), 'Some video');
+  assert.strictEqual(cleanTitle('Some_video_s2026e092799'), 'Some video');
+  assert.strictEqual(cleanTitle('Show - S01E05 - The Thing'), 'Show - The Thing');
+  assert.strictEqual(cleanTitle('Season 2 Episode 3 - Ending'), 'Ending');
+  assert.strictEqual(cleanTitle('Top 10 cars of 2024 (part 2)'), 'Top 10 cars of 2024 (part 2)');
 });

@@ -71,7 +71,6 @@
   var ICON = {
     back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
     refresh: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
-    play: '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>',
     sort: '<svg viewBox="0 0 24 24"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg>',
     tick: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
   };
@@ -184,7 +183,6 @@
       })));
     }
 
-    nodes.push(h('div', { class: 'section-title' }, ['Shows']));
     nodes.push(h('div', { class: 'grid' }, shows.map(function (s) {
       var fresh = s.latest && Date.now() - s.latest < NEW_MS;
       return h('button', { class: 'card', onclick: function () { go('#/show/' + s.id); } }, [
@@ -206,52 +204,30 @@
     return eps;
   }
 
-  // The episode to offer on "Play": resume the most recent one in progress,
-  // otherwise the oldest unwatched one, otherwise the newest.
-  function suggested(show) {
-    var eps = show.episodes; // newest first
-    var best = null;
-    eps.forEach(function (e) {
-      var p = getProgress(e.id);
-      if (p && p.t > 15 && !isWatched(e.id) && (!best || p.at > getProgress(best.id).at)) best = e;
-    });
-    if (best) return { ep: best, label: 'Resume' };
-    for (var i = eps.length - 1; i >= 0; i--) {
-      if (!isWatched(eps[i].id)) return { ep: eps[i], label: i === eps.length - 1 ? 'Play first' : 'Play next' };
-    }
-    return eps[0] ? { ep: eps[0], label: 'Play latest' } : null;
-  }
-
   function renderShow() {
     var show = state.show;
     document.title = show.name + ' – BeechView';
-    var pick = suggested(show);
     var nodes = [
       bar(show.name, { back: function () { go('#/'); } }),
       h('div', { class: 'show-head' }, [
         h('div', { class: 'art', style: artStyle(show.name, show.poster) }, [show.poster ? null : initials(show.name)]),
         h('div', { class: 'info' }, [
+          h('h2', { class: 'show-name' }, [show.name]),
           h('div', { class: 'count' }, [
             show.episodes.length + (show.episodes.length === 1 ? ' episode' : ' episodes')
-          ]),
-          h('div', { class: 'actions' }, [
-            pick ? h('button', {
-              class: 'pill', onclick: function () { play(pick.ep); }, html: ICON.play + '<span></span>'
-            }) : null,
-            h('button', {
-              class: 'pill ghost',
-              html: ICON.sort + '<span>' + (state.sortOldest ? 'Oldest first' : 'Newest first') + '</span>',
-              onclick: function () {
-                state.sortOldest = !state.sortOldest;
-                save('sortOldest', state.sortOldest);
-                renderShow();
-              }
-            })
           ])
-        ])
+        ]),
+        h('button', {
+          class: 'pill ghost sort',
+          html: ICON.sort + '<span>' + (state.sortOldest ? 'Oldest first' : 'Newest first') + '</span>',
+          onclick: function () {
+            state.sortOldest = !state.sortOldest;
+            save('sortOldest', state.sortOldest);
+            renderShow();
+          }
+        })
       ])
     ];
-    if (pick) nodes[1].querySelector('.pill span').textContent = pick.label;
 
     if (!show.episodes.length) {
       nodes.push(h('div', { class: 'empty' }, [
