@@ -283,6 +283,7 @@
   var saveTimer = null, fadeTimer = null, nextTimer = null;
 
   function play(ep) {
+    state.playerFromApp = true;
     go('#/play/' + state.show.id + '/' + encodeURIComponent(ep.id));
   }
 
@@ -352,7 +353,7 @@
   video.addEventListener('ended', function () {
     persist({ done: true });
     var next = nextEpisode();
-    if (!next) { history.back(); return; }
+    if (!next) { leavePlayer(); return; }
     var n = 8;
     document.getElementById('upNextTitle').textContent = next.title;
     document.getElementById('upNextCount').textContent = n;
@@ -367,7 +368,7 @@
   document.getElementById('upNextCancel').onclick = cancelUpNext;
 
   function goNext(next) {
-    location.replace('#/play/' + state.playing.show.id + '/' + encodeURIComponent(next.id));
+    go('#/play/' + state.playing.show.id + '/' + encodeURIComponent(next.id), true);
   }
   function cancelUpNext() {
     clearInterval(nextTimer);
@@ -395,14 +396,26 @@
   }
   player.addEventListener('touchstart', function () { showBar(); }, { passive: true });
   player.addEventListener('mousemove', function () { showBar(); });
-  document.getElementById('playerBack').addEventListener('click', function () { history.back(); });
+  document.getElementById('playerBack').addEventListener('click', function () { leavePlayer(); });
 
   // ---------------------------------------------------------------- routing
   // Read the hash from the raw URL: some Safari versions decode location.hash,
   // which would mangle show and episode ids that contain encoded characters.
-  function rawHash() {
+  //
+  // Some browsers (seemingly HomeView's) reload the whole page whenever the
+  // address changes, even if only the "#/…" part does. When BeechView spots
+  // that, it switches to "in-page" navigation: the current screen is kept in
+  // memory and the address is left alone. See launch().
+  var inPageNav = false;
+  try { inPageNav = localStorage.getItem('bv:inPageNav') === '1'; } catch (e) { /* ignore */ }
+  var memHash = '';
+
+  function urlHash() {
     var i = location.href.indexOf('#');
     return i < 0 ? '' : location.href.slice(i + 1);
+  }
+  function rawHash() {
+    return inPageNav ? memHash : urlHash();
   }
   function currentRoute() {
     var parts = rawHash().replace(/^\/?/, '').split('/');
@@ -422,9 +435,28 @@
     return r.name !== 'home' && r.show === showId;
   }
 
-  function go(hash) {
-    if (rawHash() === hash.slice(1)) route();
-    else location.hash = hash;
+  // Move to another screen. `replace` swaps the current history entry
+  // instead of adding one (e.g. auto-play of the next episode).
+  function go(hash, replace) {
+    var target = hash.replace(/^#/, '');
+    if (rawHash() === target) return route();
+    if (inPageNav) {
+      memHash = target;
+      return routeChanged();
+    }
+    // Note the time, so if the browser reloads the page in response, the
+    // next launch can tell (see launch()).
+    try { sessionStorage.setItem('bv:navAt', JSON.stringify({ to: target, at: Date.now() })); } catch (e) { /* ignore */ }
+    if (replace) location.replace('#' + target);
+    else location.hash = '#' + target;
+  }
+
+  // Leave the player. With normal navigation use the browser's history, so
+  // its back button stays in step; otherwise go to the channel page.
+  function leavePlayer() {
+    var pl = state.playing;
+    if (!inPageNav && state.playerFromApp) history.back();
+    else go(pl ? '#/show/' + pl.show.id : '#/', true);
   }
 
   // Fetch a show, retrying a couple of times if the server is slow to answer.
@@ -456,7 +488,7 @@
       ready.then(function (show) {
         if (!stillOn(r.show)) return;
         var ep = show.episodes.find(function (e) { return e.id === r.ep; });
-        if (!ep) { location.replace('#/show/' + show.id); return; }
+        if (!ep) { go('#/show/' + show.id, true); return; }
         if (!app.firstChild || !state.show) { state.show = show; renderShow(); } // draw the show underneath
         openPlayer(show, ep);
       }).catch(function () { showError(r.show); });
@@ -514,31 +546,57 @@
   function rememberedRoute() {
     try { return sessionStorage.getItem('bv:route') || ''; } catch (e) { return ''; }
   }
-  window.addEventListener('hashchange', function () {
+  function routeChanged() {
+    // The address changed and the page is still here a moment later, so this
+    // browser doesn't reload on address changes: forget the marker set by go().
+    setTimeout(function () {
+      try { sessionStorage.removeItem('bv:navAt'); } catch (e) { /* ignore */ }
+    }, 1000);
     rememberRoute();
     var r = currentRoute();
     if (r.name !== 'home') report('screen', r.name + ' ' + safeDecode(r.show));
+    route();
+  }
+  window.addEventListener('hashchange', function () {
+    if (!inPageNav) routeChanged();
   });
 
-  // On launch, start from the home screen with a fresh look at the library.
-  // But if Safari *reloaded* the page (the reload button, or Safari restarting
-  // the page by itself, e.g. when short of memory), go back to the channel
-  // you were on instead of dumping you on the home screen.
+  // On launch, open the screen in the address (so a link to a channel opens
+  // that channel), always with a fresh scan of the library. If the page was
+  // reloaded, return to the screen you were on.
   function launch(restored) {
     var how = restored ? 'restored' : navigationType();
     var last = rememberedRoute();
-    var lastRoute = /^\/?(show|play)\/([^/]+)/.exec(last);
-    report('page opened', how + (last ? ' (was on ' + safeDecode(last) + ')' : ''));
+    var navAt = null;
+    try {
+      navAt = JSON.parse(sessionStorage.getItem('bv:navAt') || 'null');
+      sessionStorage.removeItem('bv:navAt');
+    } catch (e) { /* ignore */ }
+
+    // Did the browser just reload the page because we changed the address?
+    // (We changed it moments ago and the page has started again on that
+    // address.) If so, stop changing the address from now on.
+    if (!inPageNav && navAt && Date.now() - navAt.at < 5000 && urlHash() === navAt.to) {
+      inPageNav = true;
+      try { localStorage.setItem('bv:inPageNav', '1'); } catch (e) { /* ignore */ }
+      report('note', 'browser reloads the page when the address changes; using in-page navigation');
+    }
+    report('page opened', how + (inPageNav ? ', in-page navigation' : '') +
+      ' at ' + (safeDecode(urlHash()) || '/') + (last ? ' (was on ' + safeDecode(last) + ')' : ''));
+
     state.loaded = false;
     state.failures = 0;
     state.show = null;
+    state.playerFromApp = false;
     closePlayer();
-    var target = '/';
-    if (how === 'reload' && lastRoute) target = '/show/' + lastRoute[2];
-    if (rawHash() !== target) history.replaceState(null, '', location.pathname + location.search + '#' + target);
+
+    if (inPageNav) {
+      // The address may be stale; after a reload, use the remembered screen.
+      memHash = (how === 'reload' && last) ? last : urlHash();
+    }
     rememberRoute();
-    route();       // shows "Loading…" and fetches the server's latest scan
-    refresh(true); // then asks the server to rescan the folders now
+    route();       // the requested screen ("Loading…" until the library arrives)
+    refresh(true); // and ask the server to rescan the folders now
   }
 
   // Re-scan the library. New folders become new shows without a reload.
@@ -585,6 +643,5 @@
   });
   window.addEventListener('pagehide', function () { persist(); });
   window.addEventListener('pageshow', function (e) { if (e.persisted) launch(true); });
-  window.addEventListener('hashchange', route);
   launch();
 })();

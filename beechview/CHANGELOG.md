@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.3
+
+- Fixed: opening a channel link directly (e.g. .../#/show/Geoff%20Marshall)
+  went to the home screen. BeechView now opens the screen in the address,
+  still with a fresh scan of the library.
+- Fixed: on HomeView, opening a channel briefly showed it and then went back
+  to the home screen. HomeView's browser appears to reload the page whenever
+  the address changes. BeechView now detects this and switches to changing
+  screens without touching the address, so no reloads happen.
+
 ## 1.2.2
 
 - Fixed (likely cause): opening a channel could jump back to the home
