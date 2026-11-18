@@ -24,14 +24,30 @@ this app's default **media_path**.
 
 ## 2. Options
 
-| Option           | Meaning |
-| ---------------- | ------- |
-| `media_path`     | Folder whose sub-folders are the shows. Must start with `/media/`. |
-| `rescan_seconds` | How long a folder scan is reused before checking for new shows again. |
+| Option                       | Meaning |
+| ---------------------------- | ------- |
+| **Shows folder**             | Folder whose sub-folders are the channels. Must start with `/media/`. |
+| **Rescan interval (seconds)**| How long a folder scan is reused before checking for new channels again. |
+| **Work mode**                | Switch on to use work mode (below); switch off to always show the normal videos. |
+| **Work entities**            | Work mode is active while *every* one of these is on. |
+| **Work videos folder**       | Folder whose sub-folders are the work channels. Must start with `/media/`. |
+
+### Work mode
+
+While every **work entity** is on (by default
+`binary_sensor.boot_room_working_day` and `schedule.work_schedule`), BeechView
+shows the channels in the **work videos folder** instead of the normal ones.
+The bar turns orange and the title reads **BeechView**Workday.
+
+- Changes are picked up within about 30 seconds. A video that is playing is
+  never interrupted; the switch happens when you leave it.
+- If an entity can't be read, or the work folder can't be read, BeechView
+  shows the normal videos and says why in the **Log** tab.
+- Watch progress for work videos is kept separately.
 
 ## 3. Watch on HomeView
 
-In Safari on HomeView, open `http://<home-assistant-ip>:8080`. This page needs no
+In Safari on HomeView, open `http://<home-assistant-ip>:8888`. This page needs no
 Home Assistant login. You can change the port under **Network** on this
 app's **Configuration** tab.
 

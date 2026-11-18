@@ -6,12 +6,33 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const http = require('http');
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-'));
+const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-work-'));
 // Same file Home Assistant would write from the Configuration tab.
 const options = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-opts-')), 'options.json');
-fs.writeFileSync(options, JSON.stringify({ media_path: root, rescan_seconds: 0 }));
+fs.writeFileSync(options, JSON.stringify({
+  media_path: root,
+  rescan_seconds: 0,
+  work_mode: true,
+  work_entities: ['binary_sensor.boot_room_working_day', 'schedule.work_schedule'],
+  work_media_path: workRoot,
+}));
 process.env.BEECHVIEW_OPTIONS = options;
-const { createServer, cleanTitle } = require('../server');
+const { createServer, cleanTitle, checkWorkMode } = require('../server');
+
+// A fake Home Assistant API: entity states can be changed by the tests.
+const haStates = { 'binary_sensor.boot_room_working_day': 'off', 'schedule.work_schedule': 'off' };
+const ha = http.createServer((req, res) => {
+  const id = decodeURIComponent(req.url.replace('/api/states/', ''));
+  if (!(id in haStates)) { res.writeHead(404); return res.end('{}'); }
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ entity_id: id, state: haStates[id] }));
+});
+
+fs.mkdirSync(path.join(workRoot, 'Work Channel'), { recursive: true });
+fs.writeFileSync(path.join(workRoot, 'Work Channel', 's2026e092799_Spreadsheets.mp4'), Buffer.alloc(100, 3));
 
 function write(rel, data = 'x') {
   const f = path.join(root, rel);
@@ -36,14 +57,19 @@ for (const f of ['s2024e1105 - Second [abcdefghijk]', 's2024e1001 - First [bbbbb
 
 let base, server;
 test.before(() => new Promise((r) => {
-  server = createServer().listen(0, '127.0.0.1', () => {
-    base = `http://127.0.0.1:${server.address().port}`;
-    r();
+  ha.listen(0, '127.0.0.1', () => {
+    process.env.BEECHVIEW_HA_URL = `http://127.0.0.1:${ha.address().port}/api`;
+    server = createServer().listen(0, '127.0.0.1', () => {
+      base = `http://127.0.0.1:${server.address().port}`;
+      r();
+    });
   });
 }));
 test.after(() => {
   server.close();
+  ha.close();
   fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(workRoot, { recursive: true, force: true });
   fs.rmSync(path.dirname(options), { recursive: true, force: true });
 });
 
@@ -101,4 +127,48 @@ test('cleanTitle strips ids, series/episode numbers and dates', () => {
   assert.strictEqual(cleanTitle('Show - S01E05 - The Thing'), 'Show - The Thing');
   assert.strictEqual(cleanTitle('Season 2 Episode 3 - Ending'), 'Ending');
   assert.strictEqual(cleanTitle('Top 10 cars of 2024 (part 2)'), 'Top 10 cars of 2024 (part 2)');
+});
+
+test('work mode: work videos only while every work entity is on', async () => {
+  const shows = async () => (await fetch(base + '/api/shows')).json();
+
+  await checkWorkMode();
+  let data = await shows();
+  assert.strictEqual(data.mode, 'normal');
+
+  haStates['binary_sensor.boot_room_working_day'] = 'on';
+  await checkWorkMode();
+  assert.strictEqual((await shows()).mode, 'normal', 'one entity on is not enough');
+
+  haStates['schedule.work_schedule'] = 'on';
+  await checkWorkMode();
+  await (await fetch(base + '/api/shows?refresh=1')).json(); // first scan of the work folder
+  data = await shows();
+  assert.strictEqual(data.mode, 'work');
+  assert.deepStrictEqual(data.shows.map((s) => s.name), ['Work Channel']);
+
+  const show = await (await fetch(base + '/api/shows/Work%20Channel')).json();
+  assert.strictEqual(show.mode, 'work');
+  assert.strictEqual(show.episodes[0].title, 'Spreadsheets');
+  assert.ok(show.episodes[0].id.startsWith('work~'), 'work progress is kept separate');
+  assert.ok(show.episodes[0].src.startsWith('work-media/'));
+  const video = await fetch(base + '/' + show.episodes[0].src, { headers: { Range: 'bytes=0-9' } });
+  assert.strictEqual(video.status, 206);
+
+  // A channel from the normal library still opens (e.g. it was on screen).
+  assert.strictEqual((await fetch(base + '/api/shows/Channel%20A')).status, 200);
+
+  haStates['schedule.work_schedule'] = 'off';
+  await checkWorkMode();
+  assert.strictEqual((await shows()).mode, 'normal');
+});
+
+test('work mode: an unknown entity means normal videos', async () => {
+  haStates['schedule.work_schedule'] = 'on';
+  haStates['binary_sensor.boot_room_working_day'] = 'on';
+  await checkWorkMode();
+  assert.strictEqual((await (await fetch(base + '/api/shows')).json()).mode, 'work');
+  delete haStates['schedule.work_schedule'];
+  await checkWorkMode();
+  assert.strictEqual((await (await fetch(base + '/api/shows')).json()).mode, 'normal');
 });

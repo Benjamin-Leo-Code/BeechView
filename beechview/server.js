@@ -1,9 +1,12 @@
 'use strict';
 
 // BeechView – a tiny, dependency-free media server for a folder of shows.
-// Every top-level folder inside MEDIA_ROOT is a "show"; every video file found
-// anywhere beneath it (any depth) is an "episode". The library is re-scanned on
-// demand, so newly added folders appear as new shows automatically.
+// Every top-level folder inside a library folder is a "show"; every video file
+// found anywhere beneath it (any depth) is an "episode". Libraries are
+// re-scanned on demand, so newly added folders appear as new shows.
+//
+// There are two libraries: the normal one, and an optional "work" one that is
+// served instead while every configured Home Assistant entity is on.
 
 const http = require('http');
 const fs = require('fs');
@@ -24,7 +27,7 @@ const OPTIONS = haOptions();
 
 const MEDIA_ROOT = path.resolve(OPTIONS.media_path || '/media');
 const SCAN_TTL_MS = Number(OPTIONS.rescan_seconds ?? 15) * 1000;
-const PORT = 8080; // must match ingress_port in config.yaml
+const PORT = 8888; // must match ingress_port in config.yaml
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv']);
@@ -60,8 +63,22 @@ const SHOW_ART = ['poster', 'folder', 'cover', 'show', 'fanart', 'banner'];
 const hidden = (name) => name.startsWith('.') || name.startsWith('@') || name === '#recycle';
 
 const toUrlPath = (rel) => rel.split(path.sep).map(encodeURIComponent).join('/');
-// Relative URL, so it also works behind Home Assistant's ingress prefix.
-const mediaUrl = (rel) => 'media/' + toUrlPath(rel);
+
+// A library: a folder of shows, served under its own URL prefix. Work episode
+// ids get a prefix so their watch progress never mixes with the normal ones.
+function makeLibrary(mode, root, urlPrefix, idPrefix) {
+  return {
+    mode,
+    root: path.resolve(root),
+    urlPrefix,
+    idPrefix,
+    cache: { at: 0, data: null, pending: null },
+    // Relative URL, so it also works behind Home Assistant's ingress prefix.
+    url(file) {
+      return urlPrefix + '/' + toUrlPath(path.relative(this.root, file));
+    },
+  };
+}
 
 async function walk(dir, depth = 0, out = []) {
   if (depth > 6) return out;
@@ -114,8 +131,8 @@ function findDate(text) {
   return null;
 }
 
-async function scanShow(name) {
-  const showDir = path.join(MEDIA_ROOT, name);
+async function scanShow(lib, name) {
+  const showDir = path.join(lib.root, name);
   const files = await walk(showDir);
   const fileSet = new Set(files);
   const episodes = [];
@@ -154,20 +171,19 @@ async function scanShow(name) {
       }
     }
 
-    const rel = path.relative(MEDIA_ROOT, file);
     const relInShow = path.relative(showDir, file);
     latest = Math.max(latest, stat.mtimeMs);
     episodes.push({
-      id: toUrlPath(rel),
+      id: lib.idPrefix + toUrlPath(path.relative(lib.root, file)),
       title: cleanTitle(base),
       date: findDate(relInShow),
       sortKey: relInShow.toLowerCase(),
       size: stat.size,
       added: stat.mtimeMs,
       playable: SAFARI_EXT.has(ext),
-      src: mediaUrl(rel),
-      thumb: thumb ? mediaUrl(path.relative(MEDIA_ROOT, thumb)) : null,
-      subtitles: subtitles ? mediaUrl(path.relative(MEDIA_ROOT, subtitles)) : null,
+      src: lib.url(file),
+      thumb: thumb ? lib.url(thumb) : null,
+      subtitles: subtitles ? lib.url(subtitles) : null,
     });
   }
 
@@ -184,7 +200,7 @@ async function scanShow(name) {
     for (const ie of IMAGE_EXT) {
       const candidate = path.join(showDir, n + ie);
       if (fileSet.has(candidate)) {
-        poster = mediaUrl(path.relative(MEDIA_ROOT, candidate));
+        poster = lib.url(candidate);
         break outer;
       }
     }
@@ -194,17 +210,18 @@ async function scanShow(name) {
   return { id: encodeURIComponent(name), name, poster, latest, episodes };
 }
 
-let cache = { at: 0, data: null, pending: null };
-
-function runScan() {
+function runScan(lib) {
+  const cache = lib.cache;
   if (!cache.pending) {
     const started = Date.now();
     cache.pending = (async () => {
       let entries = [];
       try {
-        entries = await fsp.readdir(MEDIA_ROOT, { withFileTypes: true });
+        entries = await fsp.readdir(lib.root, { withFileTypes: true });
+        lib.readable = true;
       } catch (err) {
-        console.error(`Cannot read MEDIA_ROOT ${MEDIA_ROOT}: ${err.message}`);
+        if (lib.readable !== false) console.error(`Cannot read the ${lib.mode} folder ${lib.root}: ${err.message}`);
+        lib.readable = false;
       }
       const dirs = entries.filter((e) => e.isDirectory() && !hidden(e.name)).map((e) => e.name);
       // A few shows at a time, so a rescan of a network share doesn't hog the
@@ -212,7 +229,7 @@ function runScan() {
       const shows = [];
       let next = 0;
       const worker = async () => {
-        while (next < dirs.length) shows.push(await scanShow(dirs[next++]));
+        while (next < dirs.length) shows.push(await scanShow(lib, dirs[next++]));
       };
       await Promise.all([worker(), worker(), worker()]);
       // Most recently updated show (newest video) first.
@@ -221,7 +238,9 @@ function runScan() {
       const firstScan = !cache.data;
       cache.at = Date.now();
       cache.data = shows;
-      if (firstScan) console.log(`Found ${shows.length} shows in ${((cache.at - started) / 1000).toFixed(1)} s`);
+      if (firstScan) {
+        console.log(`Found ${shows.length} ${lib.mode} shows in ${((cache.at - started) / 1000).toFixed(1)} s`);
+      }
       return shows;
     })().finally(() => {
       cache.pending = null;
@@ -233,11 +252,80 @@ function runScan() {
 // Scanning a network share can be slow, so once a scan exists, answer from it
 // straight away and refresh it in the background when it is out of date.
 // Only the very first scan, or a forced one (the refresh button), is waited for.
-async function scanLibrary(force = false) {
-  if (force || !cache.data || SCAN_TTL_MS === 0) return runScan();
-  if (Date.now() - cache.at >= SCAN_TTL_MS) runScan().catch((err) => console.error(err));
+async function scanLibrary(lib = LIBRARIES.normal, force = false) {
+  const cache = lib.cache;
+  if (force || !cache.data || SCAN_TTL_MS === 0) return runScan(lib);
+  if (Date.now() - cache.at >= SCAN_TTL_MS) runScan(lib).catch((err) => console.error(err));
   return cache.data;
 }
+
+// ---------------------------------------------------------------------------
+// Work mode
+// ---------------------------------------------------------------------------
+// While every entity in work_entities is "on" (e.g. a working-day binary
+// sensor and a work schedule), the work library is served instead of the
+// normal one. Entity states come from Home Assistant's API, which the app is
+// given access to (homeassistant_api in config.yaml).
+
+const WORK_ENTITIES = (Array.isArray(OPTIONS.work_entities) ? OPTIONS.work_entities : [])
+  .map((e) => String(e).trim())
+  .filter(Boolean);
+const WORK = {
+  enabled: OPTIONS.work_mode === true && WORK_ENTITIES.length > 0 && !!OPTIONS.work_media_path,
+  active: false,
+  problem: null,
+};
+// BEECHVIEW_HA_URL lets the tests point this at a fake Home Assistant.
+const haApi = () => process.env.BEECHVIEW_HA_URL || 'http://supervisor/core/api';
+const WORK_CHECK_MS = 30 * 1000;
+const ON_STATES = new Set(['on', 'true']);
+
+const LIBRARIES = {
+  normal: makeLibrary('normal', MEDIA_ROOT, 'media', ''),
+  work: WORK.enabled ? makeLibrary('work', OPTIONS.work_media_path, 'work-media', 'work~') : null,
+};
+
+async function entityState(entityId) {
+  const res = await fetch(`${haApi()}/states/${encodeURIComponent(entityId)}`, {
+    headers: { Authorization: `Bearer ${process.env.SUPERVISOR_TOKEN || ''}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (res.status === 404) throw new Error(`${entityId} doesn't exist in Home Assistant`);
+  if (!res.ok) throw new Error(`couldn't read ${entityId} (HTTP ${res.status})`);
+  return String((await res.json()).state).toLowerCase();
+}
+
+async function checkWorkMode() {
+  if (!WORK.enabled) return false;
+  let active = false;
+  let problem = null;
+  try {
+    const states = await Promise.all(WORK_ENTITIES.map(entityState));
+    active = states.every((st) => ON_STATES.has(st));
+  } catch (err) {
+    problem = err.message;
+  }
+  if (problem !== WORK.problem) {
+    if (problem) console.error(`Work mode: ${problem}. Showing the normal library.`);
+    else if (WORK.problem) console.log('Work mode: entities readable again.');
+    WORK.problem = problem;
+  }
+  // Network storage can mount after the app starts: keep retrying the work
+  // folder while it is needed but couldn't be read.
+  if (active && LIBRARIES.work && !LIBRARIES.work.readable) {
+    await runScan(LIBRARIES.work).catch(() => {});
+  }
+  if (active !== WORK.active) {
+    console.log(`Work mode ${active ? 'ON' : 'OFF'} (${WORK_ENTITIES.join(', ')})`);
+    WORK.active = active;
+  }
+  return active;
+}
+
+// The work library is only used if its folder can be read, so a mistyped
+// work folder falls back to the normal shows rather than an empty screen.
+const currentLibrary = () =>
+  (WORK.active && LIBRARIES.work && LIBRARIES.work.readable ? LIBRARIES.work : LIBRARIES.normal);
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -369,11 +457,15 @@ async function handle(req, res) {
   if (req.method === 'POST' && p === '/api/log') return logFromClient(req, res);
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendError(res, 405, 'Method not allowed');
 
-  if (p === '/api/health') return sendJson(res, 200, { ok: true, mediaRoot: MEDIA_ROOT });
+  if (p === '/api/health') {
+    return sendJson(res, 200, { ok: true, mode: currentLibrary().mode, workMode: WORK.enabled ? WORK : 'off' });
+  }
 
   if (p === '/api/shows') {
-    const shows = await scanLibrary(url.searchParams.has('refresh'));
+    const lib = currentLibrary();
+    const shows = await scanLibrary(lib, url.searchParams.has('refresh'));
     return sendJson(res, 200, {
+      mode: lib.mode,
       shows: shows.map(({ episodes, ...s }) => ({
         ...s,
         episodeCount: episodes.length,
@@ -383,14 +475,20 @@ async function handle(req, res) {
 
   if (p.startsWith('/api/shows/')) {
     const id = p.slice('/api/shows/'.length);
-    const shows = await scanLibrary(url.searchParams.has('refresh'));
-    const show = shows.find((s) => s.id === id || s.name === safeDecode(id));
-    if (!show) return sendJson(res, 404, { error: 'Show not found' });
-    return sendJson(res, 200, show);
+    // Look in the current library first, then the other one, so a show that
+    // is open when work mode switches keeps working until you leave it.
+    const libs = [currentLibrary(), LIBRARIES.normal, LIBRARIES.work].filter(Boolean);
+    for (const lib of new Set(libs)) {
+      const shows = await scanLibrary(lib, url.searchParams.has('refresh'));
+      const show = shows.find((s) => s.id === id || s.name === safeDecode(id));
+      if (show) return sendJson(res, 200, { ...show, mode: lib.mode });
+    }
+    return sendJson(res, 404, { error: 'Show not found' });
   }
 
-  if (p.startsWith('/media/')) {
-    const file = safeResolve(MEDIA_ROOT, p.slice('/media/'.length));
+  const lib = [LIBRARIES.normal, LIBRARIES.work].find((l) => l && p.startsWith('/' + l.urlPrefix + '/'));
+  if (lib) {
+    const file = safeResolve(lib.root, p.slice(lib.urlPrefix.length + 2));
     if (!file) return sendError(res, 404, 'Not found');
     const isImage = IMAGE_EXT.has(path.extname(file).toLowerCase());
     return sendFile(req, res, file, {
@@ -427,9 +525,18 @@ if (require.main === module) {
   createServer().listen(PORT, () => {
     console.log(`BeechView listening on port ${PORT}`);
     console.log(`Serving shows from ${MEDIA_ROOT}`);
+    if (WORK.enabled) {
+      console.log(`Work mode: ${LIBRARIES.work.root} while all of these are on: ${WORK_ENTITIES.join(', ')}`);
+    } else if (OPTIONS.work_mode) {
+      console.log('Work mode is switched on but needs work_entities and work_media_path; ignoring it.');
+    }
     // Scan straight away so the first visit doesn't have to wait for it.
-    scanLibrary(true).catch((err) => console.error(err));
+    for (const lib of [LIBRARIES.normal, LIBRARIES.work]) {
+      if (lib) scanLibrary(lib, true).catch((err) => console.error(err));
+    }
+    checkWorkMode();
+    setInterval(checkWorkMode, WORK_CHECK_MS);
   });
 }
 
-module.exports = { createServer, scanLibrary, cleanTitle };
+module.exports = { createServer, scanLibrary, cleanTitle, checkWorkMode };

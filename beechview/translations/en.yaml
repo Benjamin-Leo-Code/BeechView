@@ -1,0 +1,22 @@
+configuration:
+  media_path:
+    name: Shows folder
+    description: Folder whose sub-folders are the channels. Must start with /media/.
+  rescan_seconds:
+    name: Rescan interval (seconds)
+    description: How long a folder scan is reused before checking for new channels again.
+  work_mode:
+    name: Work mode
+    description: >-
+      Turn on to show the work videos instead of the normal ones while all of
+      the work entities are on. Turn off to always show the normal videos.
+  work_entities:
+    name: Work entities
+    description: >-
+      Work mode is active while every one of these entities is on, for example
+      binary_sensor.boot_room_working_day and schedule.work_schedule.
+  work_media_path:
+    name: Work videos folder
+    description: Folder whose sub-folders are the work channels. Must start with /media/.
+network:
+  8888/tcp: Web page for Safari on HomeView (no login needed)
