@@ -10,11 +10,11 @@
   var playerBar = document.getElementById('playerBar');
   var upNext = document.getElementById('upNext');
 
-  var REFRESH_MS = 60 * 1000;       // re-check for new shows/episodes every minute
+  var REFRESH_MS = 30 * 1000;       // re-check for new shows/episodes (and work mode) every 30 s
   var NEW_MS = 3 * 24 * 3600 * 1000; // "NEW" badge for shows updated in the last 3 days
   var WATCHED = 0.92;                // fraction played that counts as watched
 
-  var state = { shows: [], show: null, playing: null, sortOldest: false, loaded: false, failures: 0 };
+  var state = { shows: [], show: null, playing: null, sortOldest: false, loaded: false, failures: 0, mode: 'normal' };
 
   // ---------------------------------------------------------------- storage
   // Progress lives in this device's localStorage. Wrapped in try/catch so the
@@ -147,18 +147,34 @@
     ]);
   }
 
+  // ---------------------------------------------------------------- work mode
+  // The server decides the mode (from Home Assistant entities). Work mode has
+  // an orange bar and the title "BeechView" + grey "Workday".
+  function isWork() { return state.mode === 'work'; }
+  function appName() { return isWork() ? 'BeechViewWorkday' : 'BeechView'; }
+  function homeTitle() {
+    return isWork() ? h('span', null, ['BeechView', h('span', { class: 'work-tag' }, ['Workday'])]) : 'BeechView';
+  }
+  function applyMode(mode) {
+    var changed = (mode || 'normal') !== state.mode;
+    state.mode = mode || 'normal';
+    document.body.classList.toggle('work', isWork());
+    if (changed) report('mode', state.mode);
+    return changed;
+  }
+
   function loadingView(title, opts) {
-    mount([bar(title || 'BeechView', opts), h('div', { class: 'empty loading' }, [
+    mount([bar(title || homeTitle(), opts), h('div', { class: 'empty loading' }, [
       h('div', { class: 'spinner' }), 'Loading\u2026'
     ])]);
   }
 
   // ---------------------------------------------------------------- views
   function renderHome() {
-    document.title = 'BeechView';
+    document.title = appName();
     if (!state.loaded) return loadingView();
     var shows = state.shows;
-    var nodes = [bar('BeechView')];
+    var nodes = [bar(homeTitle())];
 
     if (!shows.length) {
       nodes.push(h('div', { class: 'empty' }, [
@@ -172,7 +188,7 @@
     var inProgress = Object.keys(progress)
       .filter(function (id) {
         var p = progress[id];
-        return p.d && p.t > 15 && !isWatched(id) && p.show;
+        return p.d && p.t > 15 && !isWatched(id) && p.show && (p.mode || 'normal') === state.mode;
       })
       .sort(function (a, b) { return progress[b].at - progress[a].at; })
       .slice(0, 8);
@@ -216,7 +232,7 @@
 
   function renderShow() {
     var show = state.show;
-    document.title = show.name + ' – BeechView';
+    document.title = show.name + ' – ' + appName();
     var nodes = [
       bar(show.name, { back: function () { go('#/'); } }),
       h('div', { class: 'show-head' }, [
@@ -291,7 +307,7 @@
     state.playing = { show: show, ep: ep };
     document.getElementById('playerShow').textContent = show.name;
     document.getElementById('playerEp').textContent = ep.title;
-    document.title = ep.title + ' – BeechView';
+    document.title = ep.title + ' – ' + appName();
     cancelUpNext();
 
     while (video.firstChild) video.removeChild(video.firstChild);
@@ -330,7 +346,8 @@
     var pl = state.playing;
     if (!pl || !video.duration) return;
     setProgress(pl.ep.id, video.currentTime, video.duration, Object.assign({
-      show: pl.show.id, showName: pl.show.name, title: pl.ep.title, thumb: pl.ep.thumb
+      show: pl.show.id, showName: pl.show.name, title: pl.ep.title, thumb: pl.ep.thumb,
+      mode: pl.show.mode || state.mode
     }, extra || {}));
   }
 
@@ -475,7 +492,7 @@
 
   function showError(id) {
     if (!stillOn(id)) return;
-    mount([bar('BeechView', { back: function () { go('#/'); } }), h('div', { class: 'empty' }, [
+    mount([bar(homeTitle(), { back: function () { go('#/'); } }), h('div', { class: 'empty' }, [
       h('strong', null, ['Couldn’t open this show']),
       'Tap refresh to try again.'
     ])]);
@@ -499,7 +516,7 @@
     if (r.name === 'show') {
       var cached = state.show && state.show.id === r.show;
       if (cached) { state.keepScroll = true; renderShow(); }
-      else { state.show = null; loadingView('BeechView', { back: function () { go('#/'); } }); }
+      else { state.show = null; loadingView(null, { back: function () { go('#/'); } }); }
       findShow(r.show).then(function () {
         if (!stillOn(r.show) || state.playing) return;
         state.keepScroll = cached;
@@ -607,11 +624,15 @@
       state.shows = data.shows;
       state.loaded = true;
       state.failures = 0;
-      if (state.playing) return;
+      applyMode(data.mode);
+      if (state.playing) return; // a video in progress is never interrupted
       var r = currentRoute();
       if (r.name === 'show') {
-        return findShow(r.show).then(function () {
+        return findShow(r.show).then(function (show) {
           if (!stillOn(r.show) || state.playing || !state.show) return;
+          // Work mode switched while this channel was open: it belongs to the
+          // other set of videos, so return to the (new) home screen.
+          if (show.mode && show.mode !== state.mode) return go('#/', true);
           state.keepScroll = true;
           renderShow();
         }).catch(function () { /* keep what is on screen */ });
@@ -626,7 +647,7 @@
       // few failures, explain what's wrong (but keep retrying).
       state.failures += 1;
       if (state.failures >= 5 && currentRoute().name === 'home') {
-        mount([bar('BeechView'), h('div', { class: 'empty' }, [
+        mount([bar(homeTitle()), h('div', { class: 'empty' }, [
           h('strong', null, ['Can’t reach the library']),
           'Still trying… Check that the BeechView server is running.'
         ])]);

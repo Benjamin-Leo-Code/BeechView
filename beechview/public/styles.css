@@ -400,3 +400,15 @@ svg { display: block; }
 .up-next-label { font-size: 0.8rem; color: var(--muted); }
 .up-next-title { font-weight: 650; margin: 0.3rem 0 0.8rem; line-height: 1.25; }
 .up-next-actions { display: flex; gap: 0.5rem; }
+
+/* ---------- Work mode ---------- */
+body.work .bar {
+  background: #fe5000;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+body.work .bar .icon-btn {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.work-tag { color: #4a4a4a; }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0
+
+- The web page is now on port **8888** (was 8080): open
+  `http://<home-assistant-ip>:8888` on HomeView.
+- New **work mode**: while every configured work entity is on (by default
+  `binary_sensor.boot_room_working_day` and `schedule.work_schedule`),
+  BeechView shows the videos in the work videos folder instead, with an orange
+  bar and the title BeechView**Workday**. Configure or switch it off on the
+  Configuration tab.
+- The page checks for changes every 30 seconds (was every minute).
+
 ## 1.2.4
 
 - BeechView is now Home Assistant only: removed the Docker Compose file, the
