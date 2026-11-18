@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1
+
+- New default folders: shows in `/media/Unraid/Videos/YouTube`, work videos
+  in `/media/Unraid/Videos/YouTube/Work`.
+- If the work folder is inside the shows folder, it is left out of the normal
+  channels, so work videos only appear in work mode.
+
 ## 1.3.0
 
 - The web page is now on port **8888** (was 8080): open
