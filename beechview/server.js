@@ -73,6 +73,11 @@ function makeLibrary(mode, root, urlPrefix, idPrefix) {
     urlPrefix,
     idPrefix,
     cache: { at: 0, data: null, pending: null },
+    // Folders to leave out of this library (see LIBRARIES below).
+    exclude: [],
+    skips(dir) {
+      return this.exclude.includes(path.resolve(dir));
+    },
     // Relative URL, so it also works behind Home Assistant's ingress prefix.
     url(file) {
       return urlPrefix + '/' + toUrlPath(path.relative(this.root, file));
@@ -80,7 +85,7 @@ function makeLibrary(mode, root, urlPrefix, idPrefix) {
   };
 }
 
-async function walk(dir, depth = 0, out = []) {
+async function walk(dir, skip, depth = 0, out = []) {
   if (depth > 6) return out;
   let entries;
   try {
@@ -91,8 +96,9 @@ async function walk(dir, depth = 0, out = []) {
   for (const e of entries) {
     if (hidden(e.name)) continue;
     const full = path.join(dir, e.name);
-    if (e.isDirectory()) await walk(full, depth + 1, out);
-    else if (e.isFile() || e.isSymbolicLink()) out.push(full);
+    if (e.isDirectory()) {
+      if (!skip(full)) await walk(full, skip, depth + 1, out);
+    } else if (e.isFile() || e.isSymbolicLink()) out.push(full);
   }
   return out;
 }
@@ -133,7 +139,7 @@ function findDate(text) {
 
 async function scanShow(lib, name) {
   const showDir = path.join(lib.root, name);
-  const files = await walk(showDir);
+  const files = await walk(showDir, (dir) => lib.skips(dir));
   const fileSet = new Set(files);
   const episodes = [];
   let latest = 0;
@@ -223,7 +229,9 @@ function runScan(lib) {
         if (lib.readable !== false) console.error(`Cannot read the ${lib.mode} folder ${lib.root}: ${err.message}`);
         lib.readable = false;
       }
-      const dirs = entries.filter((e) => e.isDirectory() && !hidden(e.name)).map((e) => e.name);
+      const dirs = entries
+        .filter((e) => e.isDirectory() && !hidden(e.name) && !lib.skips(path.join(lib.root, e.name)))
+        .map((e) => e.name);
       // A few shows at a time, so a rescan of a network share doesn't hog the
       // disk/network and slow down thumbnails and video for whoever is watching.
       const shows = [];
@@ -284,6 +292,17 @@ const LIBRARIES = {
   normal: makeLibrary('normal', MEDIA_ROOT, 'media', ''),
   work: WORK.enabled ? makeLibrary('work', OPTIONS.work_media_path, 'work-media', 'work~') : null,
 };
+
+// If the work folder is inside the normal shows folder (e.g. .../YouTube/Work
+// inside .../YouTube), leave it out of the normal library so work videos only
+// appear in work mode. This applies whenever a work folder is set, even with
+// the work mode switch off.
+if (OPTIONS.work_media_path) {
+  const workDir = path.resolve(OPTIONS.work_media_path);
+  if (workDir.startsWith(LIBRARIES.normal.root + path.sep)) {
+    LIBRARIES.normal.exclude.push(workDir);
+  }
+}
 
 async function entityState(entityId) {
   const res = await fetch(`${haApi()}/states/${encodeURIComponent(entityId)}`, {
@@ -525,6 +544,9 @@ if (require.main === module) {
   createServer().listen(PORT, () => {
     console.log(`BeechView listening on port ${PORT}`);
     console.log(`Serving shows from ${MEDIA_ROOT}`);
+    if (LIBRARIES.normal.exclude.length) {
+      console.log(`Leaving the work folder out of the normal shows: ${LIBRARIES.normal.exclude.join(', ')}`);
+    }
     if (WORK.enabled) {
       console.log(`Work mode: ${LIBRARIES.work.root} while all of these are on: ${WORK_ENTITIES.join(', ')}`);
     } else if (OPTIONS.work_mode) {

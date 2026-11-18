@@ -10,17 +10,19 @@ Your shows live on Unraid, so add the Unraid share as network storage:
 
 1. Go to **Settings → System → Storage → Add network storage**.
 2. Fill in:
-   - **Name:** `unraid`
+   - **Name:** `Unraid`
    - **Usage:** *Media*
    - **Server:** `192.168.10.80`
    - **Protocol:** *Samba/Windows (CIFS)*
-   - **Remote share:** `files`
-   - **Username / Password:** an Unraid user that can read the `files` share
+   - **Remote share:** the share that holds `Videos/YouTube`
+   - **Username / Password:** an Unraid user that can read that share
      (leave blank if the share is public).
 3. Click **Connect**.
 
-Your shows are now at `/media/unraid/pinchflat/shows (watch)`, which is
-this app's default **media_path**.
+Your shows are now under **Media → Unraid**. The defaults expect the
+channels in `/media/Unraid/Videos/YouTube` and the work channels in
+`/media/Unraid/Videos/YouTube/Work`. Change the folders on the
+**Configuration** tab if yours differ.
 
 ## 2. Options
 
@@ -30,7 +32,7 @@ this app's default **media_path**.
 | **Rescan interval (seconds)**| How long a folder scan is reused before checking for new channels again. |
 | **Work mode**                | Switch on to use work mode (below); switch off to always show the normal videos. |
 | **Work entities**            | Work mode is active while *every* one of these is on. |
-| **Work videos folder**       | Folder whose sub-folders are the work channels. Must start with `/media/`. |
+| **Work videos folder**       | Folder whose sub-folders are the work channels. Must start with `/media/`. If it is inside the shows folder, it is left out of the normal channels. |
 
 ### Work mode
 
@@ -58,6 +60,6 @@ on the **Info** tab).
 
 - **"No shows yet"**: check the **Log** tab. It shows the folder being read and
   any error. Check that `media_path` matches the folder under
-  **Media → unraid** in Home Assistant.
+  **Media → Unraid** in Home Assistant (folder names are case-sensitive).
 - **An episode won't play**: Safari only plays MP4/MOV. In Pinchflat, set the
   media profile's preferred container to MP4.

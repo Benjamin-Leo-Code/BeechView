@@ -17,6 +17,8 @@ configuration:
       binary_sensor.boot_room_working_day and schedule.work_schedule.
   work_media_path:
     name: Work videos folder
-    description: Folder whose sub-folders are the work channels. Must start with /media/.
+    description: >-
+      Folder whose sub-folders are the work channels. Must start with /media/.
+      If it is inside the shows folder, it is left out of the normal channels.
 network:
   8888/tcp: Web page for Safari on HomeView (no login needed)

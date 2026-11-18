@@ -9,7 +9,8 @@ const path = require('path');
 const http = require('http');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-'));
-const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-work-'));
+// The work folder sits inside the normal shows folder, as on the real setup.
+const workRoot = path.join(root, 'Work');
 // Same file Home Assistant would write from the Configuration tab.
 const options = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-opts-')), 'options.json');
 fs.writeFileSync(options, JSON.stringify({
@@ -75,6 +76,7 @@ test.after(() => {
 
 test('lists each folder as a show, most recently updated first', async () => {
   const { shows } = await (await fetch(base + '/api/shows')).json();
+  // "Work" is the work folder, so it is not a normal channel.
   assert.deepStrictEqual(shows.map((s) => s.name), ['Channel B', 'Channel A']);
   assert.strictEqual(shows[1].episodeCount, 2);
   assert.match(shows[1].poster, /poster\.jpg$/);
