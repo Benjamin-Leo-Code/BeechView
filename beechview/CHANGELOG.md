@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.4
+
+- BeechView is now Home Assistant only: removed the Docker Compose file, the
+  Unraid template and the settings that were only used outside Home Assistant.
+- Home Assistant's watchdog now checks the app and restarts it if it stops
+  responding.
+
 ## 1.2.3
 
 - Fixed: opening a channel link directly (e.g. .../#/show/Geoff%20Marshall)

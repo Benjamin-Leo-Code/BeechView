@@ -7,9 +7,10 @@ const os = require('os');
 const path = require('path');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-'));
-process.env.MEDIA_ROOT = root;
-process.env.SCAN_TTL_SECONDS = '0';
-process.env.HA_OPTIONS = '/nonexistent';
+// Same file Home Assistant would write from the Configuration tab.
+const options = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'beechview-opts-')), 'options.json');
+fs.writeFileSync(options, JSON.stringify({ media_path: root, rescan_seconds: 0 }));
+process.env.BEECHVIEW_OPTIONS = options;
 const { createServer, cleanTitle } = require('../server');
 
 function write(rel, data = 'x') {
@@ -40,7 +41,11 @@ test.before(() => new Promise((r) => {
     r();
   });
 }));
-test.after(() => { server.close(); fs.rmSync(root, { recursive: true, force: true }); });
+test.after(() => {
+  server.close();
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(path.dirname(options), { recursive: true, force: true });
+});
 
 test('lists each folder as a show, most recently updated first', async () => {
   const { shows } = await (await fetch(base + '/api/shows')).json();

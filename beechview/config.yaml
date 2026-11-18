@@ -1,5 +1,5 @@
 name: BeechView
-version: "1.2.3"
+version: "1.2.4"
 slug: beechview
 description: Touch-friendly player for your Pinchflat shows, made for HomeView
 url: https://github.com/Benjamin-Leo-Code/BeechView
@@ -13,6 +13,7 @@ ingress: true
 ingress_port: 8080
 panel_icon: mdi:television-play
 panel_title: BeechView
+watchdog: http://[HOST]:[PORT:8080]/api/health
 ports:
   8080/tcp: 8080
 ports_description:
