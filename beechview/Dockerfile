@@ -1,9 +1,7 @@
-# Used by Home Assistant (as an app), Docker Compose and plain Docker.
+# Built by Home Assistant when the app is installed or updated.
 FROM node:22-alpine
 WORKDIR /app
 COPY package.json server.js ./
 COPY public ./public
-ENV NODE_ENV=production PORT=8080
-EXPOSE 8080
-HEALTHCHECK CMD wget -qO- http://127.0.0.1:8080/api/health || exit 1
+ENV NODE_ENV=production
 CMD ["node", "server.js"]

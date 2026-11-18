@@ -10,20 +10,21 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
-// When run as a Home Assistant app, settings come from /data/options.json.
+// Settings come from the app's Configuration tab in Home Assistant, which
+// Home Assistant writes to /data/options.json. (BEECHVIEW_OPTIONS points the
+// tests at a different file.)
 function haOptions() {
   try {
-    return JSON.parse(fs.readFileSync(process.env.HA_OPTIONS || '/data/options.json', 'utf8'));
+    return JSON.parse(fs.readFileSync(process.env.BEECHVIEW_OPTIONS || '/data/options.json', 'utf8'));
   } catch {
     return {};
   }
 }
 const OPTIONS = haOptions();
 
-const MEDIA_ROOT = path.resolve(process.env.MEDIA_ROOT || OPTIONS.media_path || '/media');
-const PORT = parseInt(process.env.PORT || '8080', 10);
-const HOST = process.env.HOST || '0.0.0.0';
-const SCAN_TTL_MS = parseInt(process.env.SCAN_TTL_SECONDS || OPTIONS.rescan_seconds || '15', 10) * 1000;
+const MEDIA_ROOT = path.resolve(OPTIONS.media_path || '/media');
+const SCAN_TTL_MS = Number(OPTIONS.rescan_seconds ?? 15) * 1000;
+const PORT = 8080; // must match ingress_port in config.yaml
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv']);
@@ -423,8 +424,8 @@ function createServer() {
 }
 
 if (require.main === module) {
-  createServer().listen(PORT, HOST, () => {
-    console.log(`BeechView listening on http://${HOST}:${PORT}`);
+  createServer().listen(PORT, () => {
+    console.log(`BeechView listening on port ${PORT}`);
     console.log(`Serving shows from ${MEDIA_ROOT}`);
     // Scan straight away so the first visit doesn't have to wait for it.
     scanLibrary(true).catch((err) => console.error(err));
