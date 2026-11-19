@@ -45,7 +45,8 @@ The bar turns orange and the title reads **BeechView**Workday.
   never interrupted; the switch happens when you leave it.
 - If an entity can't be read, or the work folder can't be read, BeechView
   shows the normal videos and says why in the **Log** tab.
-- Watch progress for work videos is kept separately.
+- Watch progress for work videos is kept separately, and the "Continue
+  watching" row is not shown in work mode.
 
 ## 3. Watch on HomeView
 
