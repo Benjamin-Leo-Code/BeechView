@@ -193,7 +193,8 @@
       .sort(function (a, b) { return progress[b].at - progress[a].at; })
       .slice(0, 8);
 
-    if (inProgress.length) {
+    // Not shown on the work (BeechViewWorkday) home screen.
+    if (inProgress.length && !isWork()) {
       nodes.push(h('div', { class: 'section-title' }, ['Continue watching']));
       nodes.push(h('div', { class: 'rail' }, inProgress.map(function (id) {
         var p = progress[id];

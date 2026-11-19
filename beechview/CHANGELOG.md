@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.2
+
+- The "Continue watching" row is hidden on the work (BeechViewWorkday) home
+  screen. It still shows on the normal home screen, and work videos still
+  resume where you left off.
+
 ## 1.3.1
 
 - New default folders: shows in `/media/Unraid/Videos/YouTube`, work videos
